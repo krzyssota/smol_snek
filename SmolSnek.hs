@@ -43,15 +43,10 @@ main = do
         Right tree -> do
               --showTree 2 tree
               (val, store) <- runInterpreterM emptyEnv emptyStore (runProgram tree)
-              {-
-              hPutStrLn stderr $ "Exit code: " ++ show val
-              exitSuccess
-              -}
               case val of
                 Left e  -> hPutStrLn stderr e
                 Right code -> hPutStrLn stderr $ "Exit code: " ++ show code
               exitSuccess
-
 
     --[]         -> getContents >>= run 2 pProgram
     --"-s":fs    -> mapM_ (runFile 0 pProgram) fs

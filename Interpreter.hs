@@ -19,16 +19,33 @@ module Interpreter where
   runInterpreterM env store im = runStateT (runErrorT (runReaderT im env)) store
 
   runProgram :: Program -> InterpreterM Integer
-  runProgram (Program stmts positions) = do
-    --env <- interStatements stmts
+  runProgram (Program pos stmts) = do
+    env <- evalStmts stmts
     --VInt val <- local (const env) $ evalExpr $ EApp (Ident "main") []
+    liftIO $ putStrLn $ show env
     return 0
-{-
-  evalStmts :: [Stmt'] -> InterpreterM Integer
+
+  evalStmts :: [Stmt] -> InterpreterM Env
   evalStmts [] = ask -- returns the existing env ??
-  evalStmts (Expr e:ss) = do
+  evalStmts (s:ss) = do
     env <- evalStmt s
     local (const env) (evalStmts ss)
 
-  evalExpr :: Stmt' -> InterpreterM Value
-  -}
+  evalStmt :: Stmt -> InterpreterM Env
+  evalStmt (VarDef pos ident expr) = varDecl (VarDef pos ident expr)
+  evalStmt _ = ask
+
+  varDecl :: Stmt -> InterpreterM Env
+  varDecl (VarDef pos ident expr) = do
+    loc <- getNextLoc <$> get
+    env <- asks $ M.insert ident loc
+    insertValueStore loc VNull
+    return env
+
+  getNextLoc :: Store -> Int
+  getNextLoc s = M.size s + 1
+
+  insertValueStore :: Loc -> Value -> InterpreterM ()
+  insertValueStore loc val = do
+    s' <- M.insert loc val <$> get
+    put s'
