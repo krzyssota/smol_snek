@@ -6,7 +6,10 @@ terminator Stmt ";" ;
 -- DECLARATIONs
 FunDef.   Stmt ::= "def" Ident "(" [Arg] ")" Block ;
 separator Arg  "," ;
-VarDef.   Stmt ::= Ident "=" Expr ;
+--VarDef.   Stmt ::= [Ident] "=" Expr ;
+--separator nonempty Ident "=" ;
+VarDef.   Stmt ::= [Ident] Expr ;
+terminator nonempty Ident "=" ;
 
 -- ARGUMENTs
 Arg.        Arg  ::= Ident;
@@ -36,24 +39,25 @@ SWhile.     Stmt  ::= "while" Expr LoopBlock ;
 SRange.     Stmt  ::= "for" Ident "in range(" Expr ")" LoopBlock;
 SReturnE.   Stmt  ::= "return" Expr ;
 Print.      Stmt  ::= "print" "(" [Expr] ")" ;
+SAss.       Stmt  ::= Ident OpAss Expr ;
 Expr.       Stmt  ::= Expr  ;
 
 -- EXPRs
-EVar.        Expr7 ::= Ident ;
-EStr.        Expr7 ::= String ;
-EInt.        Expr7 ::= Integer ;
-ETrue.       Expr7 ::= "True" ;
-EFalse.      Expr7 ::= "False" ;
-ECall.       Expr7 ::= Ident "(" [Expr] ")" ;
-ENot.        Expr6 ::= "not" Expr7 ;             -- not
-ETern.       Expr5 ::= Expr5 "if" Expr6 "else" Expr6 ;
-EOpAss.      Expr4 ::= Ident OpAss    Expr5 ;    -- +=, -=, =
+EVar.        Expr6 ::= Ident ;
+EStr.        Expr6 ::= String ;
+EInt.        Expr6 ::= Integer ;
+ETrue.       Expr6 ::= "True" ;
+EFalse.      Expr6 ::= "False" ;
+ECall.       Expr6 ::= Ident "(" [Expr] ")" ;
+ENot.        Expr5 ::= "not" Expr6 ;             -- not
+ETern.       Expr4 ::= Expr4 "if" Expr5 "else" Expr5 ;
+--EOpAss.      Expr4 ::= Ident OpAss    Expr5 ;    -- +=, -=, =
 EAriUns.     Expr3 ::= Expr3 OpAriUns Expr4 ;    -- unsafe (division by 0)
 EAriS.       Expr2 ::= Expr2 OpAriS   Expr3 ;    -- safe
 ECmp.        Expr1 ::= Expr1 OpCmp    Expr2 ;    -- >=, <=, ==, !=
 ELog.        Expr  ::= Expr  OpLog    Expr1 ;    -- and, or
 
-coercions Expr 8 ;
+coercions Expr 7 ;
 separator Expr "," ;
 
 -- TYPEs AND OPERATORs
@@ -70,7 +74,7 @@ Eq.        OpCmp    ::= "==" ;
 Ne.        OpCmp    ::= "!=" ;
 And.       OpLog    ::= "and" ;
 Or.        OpLog    ::= "or" ;
-Ass.       OpAss    ::= "=" ;
+--Ass.       OpAss    ::= "=" ;
 AddAss.    OpAss    ::= "+=" ;
 SubAss.    OpAss    ::= "-=" ;
 

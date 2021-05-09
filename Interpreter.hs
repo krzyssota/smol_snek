@@ -23,6 +23,8 @@ module Interpreter where
     env <- evalStmts stmts
     --VInt val <- local (const env) $ evalExpr $ EApp (Ident "main") []
     liftIO $ putStrLn $ show env
+    store <- get
+    liftIO $ putStrLn $ show store
     return 0
 
   evalStmts :: [Stmt] -> InterpreterM Env
@@ -32,15 +34,38 @@ module Interpreter where
     local (const env) (evalStmts ss)
 
   evalStmt :: Stmt -> InterpreterM Env
-  evalStmt (VarDef pos ident expr) = varDecl (VarDef pos ident expr)
+  evalStmt (VarDef pos idents expr) = varsDecl (VarDef pos idents expr)
+  evalStmt (FunDef pos ident args block) = funDecl (FunDef pos ident args block)
   evalStmt _ = ask
 
-  varDecl :: Stmt -> InterpreterM Env
-  varDecl (VarDef pos ident expr) = do
+  funDecl :: Stmt -> InterpreterM Env
+  funDecl (FunDef pos ident args block) = do
     loc <- getNextLoc <$> get
     env <- asks $ M.insert ident loc
-    insertValueStore loc VNull
+    insertValueStore loc (VFunc env args block)
     return env
+
+  varsDecl :: Stmt -> InterpreterM Env -- TODO optimize eval Expr once
+  varsDecl (VarDef pos [] expr) = ask
+  varsDecl (VarDef pos (id:idents) expr) = do
+    env <- varDecl (VarDef pos [id] expr)
+    local (const env) (varsDecl (VarDef pos idents expr))
+
+  varDecl :: Stmt -> InterpreterM Env
+  varDecl (VarDef pos [] expr) = ask
+  varDecl (VarDef pos (ident:_) expr) = do
+    loc <- getNextLoc <$> get
+    env <- asks $ M.insert ident loc
+    insertValueStore loc VNull -- TODO insert evaled expr
+    return env
+  {-
+  varDecl :: Stmt -> InterpreterM Env
+  varDecl (VarDef pos idents expr) = do
+    loc <- getNextLoc <$> get
+    env <- asks $ M.insert idents loc
+    insertValueStore loc VNull -- TODO insert evaled expr
+    return env
+    -}
 
   getNextLoc :: Store -> Int
   getNextLoc s = M.size s + 1
