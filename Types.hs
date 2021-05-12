@@ -23,5 +23,5 @@ instance Show Value where
     show (VInt val)             = show val
     show (VBool b)              = show b
     show (VString str)          = show str
-    show (VFunc env args block) = "Func"
+    show (VFunc env args block) = "Func" ++ show args
     show (VNull)                = "Null"
