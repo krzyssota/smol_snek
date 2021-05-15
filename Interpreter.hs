@@ -1,3 +1,5 @@
+{-# LANGUAGE NoMonomorphismRestriction #-}
+
 module Interpreter where
   import Control.Monad.IO.Class
   import Control.Monad.State
@@ -6,6 +8,7 @@ module Interpreter where
   import Debug.Trace
   import System.IO
   import Types
+  import Error
   import AbsSmolSnekGrammar
   import LexSmolSnekGrammar
   import ParSmolSnekGrammar
@@ -28,12 +31,12 @@ module Interpreter where
     return 0
 
   evalStmts :: [Stmt] -> InterpreterM Env
-  evalStmts [] = ask -- returns the existing env ??
+  evalStmts [] = ask
   evalStmts (s:ss) = do
     env <- evalStmt s
     local (const env) (evalStmts ss)
 
-  evalStmt :: Stmt -> InterpreterM Env
+  evalStmt :: Stmt -> InterpreterM Env -- TODO should this return (Env, Result)?
   evalStmt (VarDef pos idents expr) = do
     val <- evalExpr expr
     varsDecl' pos idents val
@@ -42,32 +45,18 @@ module Interpreter where
     env <- asks $ M.insert ident loc
     insertValue loc (VFunc env args block)
     return env
-  evalStmt (Print pos (e:exprs)) = printExpr e >> evalStmt (Print pos exprs)
+  evalStmt (Print pos []) = liftIO (putStrLn "") >> ask
+  evalStmt (Print pos (e:exprs)) = printExpr e >> liftIO (putStr " ") >> evalStmt (Print pos exprs)
+  evalStmt (SBlock pos block)) = executeBlock block
   evalStmt _ = ask
- {-
-  printExprs :: [Expr] -> InterpreterM Env
-  printExprs [] = ask
-  printExprs (e:exprs) = printExpr e >> printExprs exprs
-  -}
+
+  executeBlock :: Block -> Result
+  executeBlock (Block pos (s:stmts))
 
   printExpr :: Expr -> InterpreterM ()
   printExpr e = do
     val <- evalExpr e
-    liftIO (putStrLn (show val))
-{-
-  funDecl :: a -> Ident -> [Arg] -> Block -> InterpreterM Env
-  funDecl pos ident args block = do
-    loc <- getNextLoc <$> get
-    env <- asks $ M.insert ident loc
-    insertValue loc (VFunc env args block)
-    return env
-
-
-  varsDecl :: a -> [Ident] -> Expr -> InterpreterM Env
-  varsDecl pos idents expr = do
-    val <- evalExpr expr
-    varsDecl' pos idents val
-      -}
+    liftIO (putStr (show val))
 
   varsDecl' :: a -> [Ident] -> Value -> InterpreterM Env
   varsDecl' pos [] val = ask
@@ -91,6 +80,7 @@ module Interpreter where
   evalExpr (ENot pos expr) = do
     val <- evalExpr expr
     return (VBool (not $ boolyVal val))
+
   evalExpr (ELog pos e1 opLog e2) = do -- and, or
     v1 <- evalExpr e1
     v2 <- evalExpr e2
@@ -98,36 +88,42 @@ module Interpreter where
       case opLog of
         (And pos) -> return (VBool $ b1 && b2)
         (Or pos)  -> return (VBool $ b1 || b2)
-  {-evalExpr (ECmp pos e1 opCmp e2) = do
+
+  evalExpr (ECmp pos e1 opCmp e2) = do
     v1 <- evalExpr e1
     v2 <- evalExpr e2
-    let b1 = boolyVal v1; b2 = boolyVal v2 in
-      case opLog of
-        (And pos) -> return b1 && b2
-        (Or pos)  -> return b1 || b2-}
-{-
-TODO dalej cmp ari, potem stmt ifm sass pętle potem funkcje
+    let im1 = intyVal v1; im2 = intyVal v2; op = getHsCmpOp opCmp in
+      case (v1, v2) of
+        (VString s1, VString s2) -> return (VBool $ op s1 s2)
+        _ -> case (im1, im2) of
+          (Just i1, Just i2) -> return (VBool $ op i1 i2)
+          _ -> throwError (showUnsupportedCmpOperandError opCmp v1 v2)
+
+  evalExpr (EAriS pos e1 opAriS e2) = do -- tutaj chce dodawanie stringow i 1+True=2
+    v1 <- evalExpr e1
+    v2 <- evalExpr e2
+    let im1 = intyVal v1; im2 = intyVal v2; op = getHsAriSOp opAriS in
+      case (v1, v2, opAriS) of
+        (VString s1, VString s2, Pls _) -> return (VString $ s1 ++ s2) -- concat strings
+        _ -> case (im1, im2) of
+          (Just i1, Just i2) -> return (VInt $ op i1 i2)
+          _ -> throwError (showUnsupportedAriSOperandError opAriS v1 v2)
+
+  evalExpr (EAriUns pos e1 opAriUns e2) = do
+    v1 <- evalExpr e1
+    v2 <- evalExpr e2
+    let im1 = intyVal v1; im2 = intyVal v2; op = getHsAriUnsOp opAriUns in
+      case (im1, im2) of
+        (Just i, Just 0) -> throwError showZeroDivError
+        (Just i1, Just i2) -> return (VInt $ op i1 i2)
+        _ -> throwError (showUnsupportedAriUnsOperandError opAriUns v1 v2)
+  {-
+  TODO potem stmt ifm sass pętle potem funkcje
   | ECall a Ident [Expr' a]
   | ETern a (Expr' a) (Expr' a) (Expr' a)
-  | EAriUns a (Expr' a) (OpAriUns' a) (Expr' a)
-  | EAriS a (Expr' a) (OpAriS' a) (Expr' a)
-  | ECmp a (Expr' a) (OpCmp' a) (Expr' a)
   -}
   evalExpr _ = return VNull
 
-  boolyVal :: Value -> Bool
-  boolyVal val = case val of
-                  VBool False -> True -- truthy
-                  VInt 0 -> True
-                  VString "" -> True
-                  _ -> False          -- falsy
-
-  arithyVal :: Value -> Maybe Integer
-  arithyVal val = case val of
-      VInt i -> Just i
-      VBool True -> Just 1
-      VBool False -> Just 0
-      _ -> Nothing
 
 
   getVar :: Ident -> InterpreterM Value
