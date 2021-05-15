@@ -15,8 +15,9 @@ type Loc = Int
 type Env = M.Map Ident Loc
 type Store = M.Map Loc Value
 data Value = VInt Integer | VBool Bool | VString String | VFunc Env [Arg] Block | VNull
-    deriving (Eq, Ord)
-data Result = ReturnVal Value | NoVal | Break | Continue
+  deriving (Eq, Ord)
+data StmtResult = ReturnVal Value | ReturnEnv Env | Break | Continue
+  deriving (Show)
 
 emptyEnv = M.empty
 emptyStore = M.empty

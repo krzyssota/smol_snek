@@ -24,19 +24,24 @@ module Interpreter where
   runProgram :: Program -> InterpreterM Integer
   runProgram (Program pos stmts) = do
     env <- evalStmts stmts
-    --VInt val <- local (const env) $ evalExpr $ EApp (Ident "main") []
     liftIO $ putStrLn $ show env
     store <- get
     liftIO $ putStrLn $ show store
     return 0
 
-  evalStmts :: [Stmt] -> InterpreterM Env
-  evalStmts [] = ask
+  evalStmts :: [Stmt] -> InterpreterM StmtResult
+  evalStmts [] = do
+    env <- ask
+    return (ReturnEnv env)
   evalStmts (s:ss) = do
-    env <- evalStmt s
-    local (const env) (evalStmts ss)
+    res <- evalStmt s
+    case res of
+      (ReturnEnv env) -> do
+        res <- local (const env) (evalStmts ss)
+        return res
+      _ -> throwError $ "hmmm co zwrocil pierwsze evalStmt" ++ show res
 
-  evalStmt :: Stmt -> InterpreterM Env -- TODO should this return (Env, Result)?
+  evalStmt :: Stmt -> InterpreterM StmtResult
   evalStmt (VarDef pos idents expr) = do
     val <- evalExpr expr
     varsDecl' pos idents val
@@ -44,25 +49,38 @@ module Interpreter where
     loc <- getNextLoc <$> get
     env <- asks $ M.insert ident loc
     insertValue loc (VFunc env args block)
-    return env
-  evalStmt (Print pos []) = liftIO (putStrLn "") >> ask
+    return (ReturnEnv env)
+  evalStmt (Print pos []) = do
+    liftIO (putStrLn "")
+    env <- ask
+    return (ReturnEnv env)
   evalStmt (Print pos (e:exprs)) = printExpr e >> liftIO (putStr " ") >> evalStmt (Print pos exprs)
-  evalStmt (SBlock pos block)) = executeBlock block
-  evalStmt _ = ask
+  evalStmt (SBlock pos block) = executeBlock block
+  evalStmt _ = do
+    env <- ask
+    return (ReturnEnv env)
 
-  executeBlock :: Block -> Result
-  executeBlock (Block pos (s:stmts))
+  executeBlock :: Block -> InterpreterM Result
+  executeBlock (Block pos (s:stmts)) = do
+    res <- evalStmt s
+    case res of
+      (ReturnVal val) -> return (ReturnVal val)
+      (ReturnEnv env) -> evalStmts
+      -- TODO tutaj dalej robimy
 
   printExpr :: Expr -> InterpreterM ()
   printExpr e = do
     val <- evalExpr e
     liftIO (putStr (show val))
 
-  varsDecl' :: a -> [Ident] -> Value -> InterpreterM Env
-  varsDecl' pos [] val = ask
+  varsDecl' :: a -> [Ident] -> Value -> InterpreterM StmtResult
+  varsDecl' pos [] val = do
+    env <- ask
+    return (ReturnEnv env)
   varsDecl' pos (id:idents) val = do
     env <- varDecl pos id val
-    local (const env) (varsDecl' pos idents val)
+    res <- local (const env) (varsDecl' pos idents val)
+    return res
 
   varDecl :: a -> Ident -> Value -> InterpreterM Env
   varDecl pos ident val = do
