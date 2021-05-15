@@ -33,7 +33,7 @@ main :: IO ()
 main = do
   args <- getArgs
   case args of
-    []         -> usage
+    []         -> usage -- TODO interactive mode coś a\la to: getContents >>= run 2 pProgram
     (filename:_)     -> do
       programStr <- readFile filename
       case (pProgram (myLexer programStr)) of
