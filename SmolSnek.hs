@@ -47,8 +47,7 @@ main = do
                 Left e  -> hPutStrLn stderr e
                 Right code -> hPutStrLn stderr $ "Exit code: " ++ show code
               exitSuccess
-
-
+              
     --[]         -> getContents >>= run 2 pProgram
     --"-s":fs    -> mapM_ (runFile 0 pProgram) fs
     --fs         -> mapM_ (runFile 2 pProgram) fs

@@ -16,7 +16,7 @@ type Env = M.Map Ident Loc
 type Store = M.Map Loc Value
 data Value = VInt Integer | VBool Bool | VString String | VFunc Env [Arg] Block | VNull
   deriving (Eq, Ord)
-data StmtResult = ReturnVal Value | ReturnEnv Env | Break | Continue
+data StmtResult = ReturnVal Value | ReturnEnv Env | Break | Cont
   deriving (Show)
 
 emptyEnv = M.empty
@@ -84,10 +84,10 @@ showAriUnsOp op = case op of (Mod _) -> "%"
 
 boolyVal :: Value -> Bool
 boolyVal val = case val of
-                VBool False -> True -- truthy
-                VInt 0 -> True
-                VString "" -> True
-                _ -> False          -- falsy
+                VBool False -> False -- falsy
+                VInt 0 -> False
+                VString "" -> False
+                _ -> True            -- truthy
 
 intyVal :: Value -> Maybe Integer
 intyVal val = case val of
