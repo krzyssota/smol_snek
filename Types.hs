@@ -27,7 +27,6 @@ instance Show Value where
     show (VBool b)              = show b
     show (VString str)          = show str
     show (VFunc env args block) = "function" ++ show args
-    show (VNull)                = "Null"
 
 showValueType :: Value -> String
 showValueType (VInt _) = "int"
@@ -47,8 +46,9 @@ getHsAriUnsOp op = case op of (Mod _) -> (mod)
                               (Div _) -> (div)
 getHsAriSOp :: Num a => OpAriS -> a -> a -> a
 getHsAriSOp op = case op of (Mul _) -> (*)
-                            (Pls _) -> (+)
-                            (Mns _) -> (-)
+                            (Add _) -> (+)
+                            (Sub _) -> (-)
+
 {-
 showOps :: Ops' a -> String
 showOps op = case op of (Lt _) -> "<"
@@ -72,15 +72,13 @@ showCmpOp op = case op of (Lt _) -> "<"
                           (Gte _) -> ">="
                           (Eq _)  -> "=="
                           (Ne _)  -> "!="
-
 showAriSOp :: OpAriS -> String
 showAriSOp op = case op of (Mul _) -> "*"
-                           (Pls _) -> "+"
-                           (Mns _) -> "-"
-
+                           (Add _) -> "+"
+                           (Sub _) -> "-"
 showAriUnsOp :: OpAriUns -> String
 showAriUnsOp op = case op of (Mod _) -> "%"
-                             (Div _) -> "div"
+                             (Div _) -> "/"
 
 boolyVal :: Value -> Bool
 boolyVal val = case val of

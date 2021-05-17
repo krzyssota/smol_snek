@@ -21,13 +21,13 @@ module Interpreter where
   runInterpreterM :: Env -> Store -> InterpreterM a -> IO (Either String a, Store)
   runInterpreterM env store im = runStateT (runErrorT (runReaderT im env)) store
 
-  runProgram :: Program -> InterpreterM Integer
-  runProgram (Program pos stmts) = do
+  runProgram :: Program -> String -> InterpreterM Integer
+  runProgram (Program pos stmts) filename = do -- TODO store filename smh and use it in errors
     res <- execStmts stmts
     case res of
-      ReturnVal val -> liftIO $ putStrLn $ "retval " ++ show val
+      ReturnVal val -> liftIO $ putStrLn $ "retval possibly error" ++ show val -- TODO to tez chyba error
       ReturnEnv env -> liftIO $ putStrLn $ "retenv " ++ show env
-      bc            -> liftIO $ putStrLn $ show bc -- TODO tutaj error
+      bc            -> liftIO $ putStrLn $ showSyntaxError bc
     store <- get
     liftIO $ putStrLn $ show store
     return 0
@@ -36,96 +36,80 @@ module Interpreter where
   execBlock (Block pos stmts) = execStmts stmts
 
   execStmts :: [Stmt] -> InterpreterM StmtResult
-  execStmts [] = do
-    env <- ask
-    return (ReturnEnv env)
+  execStmts [] = retenv
   execStmts (s:ss) = do
     res <- execStmt s
     case res of
       (ReturnEnv env) -> do
         local (const env) (execStmts ss)
-      (ReturnVal val) -> do
-        return (ReturnVal val)
-      _ -> throwError $ showSyntaxError res
+      _ -> return res -- return e/continue/break all stop the execution of other stmts
+      -- correctness of them will be determined by the caller
 
   execStmt :: Stmt -> InterpreterM StmtResult
-  execStmt (VarDef pos idents expr) = do
+  execStmt (VarDef pos ident expr) = do
     val <- evalExpr expr
-    varsDecl' pos idents val
+    mloc <- getVarLoc ident
+    loc <- case mloc of
+            Nothing  -> gets (getNextLoc)
+            Just loc -> return loc
+    env <- asks (M.insert ident loc)
+    insertValue loc val
+    return (ReturnEnv env)
   execStmt (FunDef pos ident args block) = do
-    loc <- getNextLoc <$> get
-    env <- asks $ M.insert ident loc
+    loc <- gets (getNextLoc)
+    env <- asks (M.insert ident loc)
     insertValue loc (VFunc env args block)
     return (ReturnEnv env)
-  execStmt (Print pos []) = do
-    liftIO (putStrLn "")
-    retenv
-    --env <- ask
-    --return (ReturnEnv env)
-  execStmt (Print pos (e:exprs)) = printExpr e >> liftIO (putStr " ") >> execStmt (Print pos exprs)
-  execStmt (SBlock pos block) = execBlock block
-  execStmt (SIf pos expr stmt) = do
+  execStmt (SPrint pos []) = liftIO (putStrLn "") >> retenv
+  execStmt (SPrint pos (e:exprs)) = printExpr e >> liftIO (putStr " ") >> execStmt (SPrint pos exprs)
+  execStmt (SIf pos expr block) = do
     val <- evalExpr expr
     if boolyVal val
-      then execStmt stmt
+      then execBlock block
       else retenv
-  execStmt (SIfElse pos expr ifStmt (SElse pos2 elseStmt)) = do
+  execStmt (SIfElse pos expr ifBlock (SElse pos2 elseBlock)) = do
     val <- evalExpr expr
     if boolyVal val
-      then execStmt ifStmt
-      else execStmt elseStmt
-  execStmt (SIfElif pos expr ifStmt elif) = do
+      then execBlock ifBlock
+      else execBlock elseBlock
+  execStmt (SIfElif pos expr ifBlock elif) = do
     val <- evalExpr expr
     if boolyVal val
-      then execStmt ifStmt
+      then execBlock ifBlock
       else execElif elif
-  execStmt while@(SWhile pos expr lblock) = do
+  execStmt (SWhile pos expr block) = do
     val <- evalExpr expr
     if boolyVal val
       then do
-        res <- execLoopBlock lblock
+        res <- execBlock block
         case res of
-          Cont      -> execStmt while
+          ReturnEnv env -> execStmt (SWhile pos expr block)
+          Cont          -> execStmt (SWhile pos expr block)
           Break         -> retenv
           ReturnVal val -> return (ReturnVal val)
-          ReturnEnv env -> execStmt while
       else retenv
+  execStmt (SBreak pos) = return Break
+  execStmt (SCont pos) = return Cont
   -- TODO usunac zeby wiedziec ze wszyskto jest pokryte
-  execStmt _ = do
-    env <- ask
-    return (ReturnEnv env)
+  --execStmt _ = do
+  --  env <- ask
+  --  return (ReturnEnv env)
 
-  execLoopBlock :: LoopBlock -> InterpreterM StmtResult -- TODO maybe merge
-  execLoopBlock (LBlock pos loopStmts) = execLoopStmts loopStmts
-  execLoopStmts :: [LoopStmt] -> InterpreterM StmtResult
-  execLoopStmts [] = retenv
-  execLoopStmts (ls:lstmts) = do
-    res <- execLoopStmt ls
-    case res of
-      ReturnEnv env -> execLoopStmts lstmts
-      _             -> return res
-
-  execLoopStmt :: LoopStmt -> InterpreterM StmtResult
-  execLoopStmt (SBreak pos) = return Break
-  execLoopStmt (SCont pos) = return Cont
-  execLoopStmt (LStmt pos stmt) = do
-    res <- execStmt stmt
-    return res
   execElif :: ElifStmt -> InterpreterM StmtResult
-  execElif (SElifElse pos expr ifStmt (SElse pos2 elseStmt)) =
-    execStmt (SIfElse pos expr ifStmt (SElse pos2 elseStmt))
-  execElif (SElifElif pos expr ifStmt elif) = do
+  execElif (SElifElse pos expr ifBlock else') =
+    execStmt (SIfElse pos expr ifBlock else')
+  execElif (SElifElif pos expr ifBlock elif) = do
     val <- evalExpr expr
     if boolyVal val
-      then execStmt ifStmt
+      then execBlock ifBlock
       else execElif elif
 
   printExpr :: Expr -> InterpreterM ()
   printExpr e = do
     val <- evalExpr e
     liftIO $ putStr (show val)
-
-  varsDecl' :: a -> [Ident] -> Value -> InterpreterM StmtResult
+{-
+  varsDecl' :: a -> [Ident] -> Value -> InterpreterM StmtResult -- TODO wywalić
   varsDecl' pos [] val = retenv
   varsDecl' pos (id:idents) val = do
     env <- varDecl pos id val
@@ -138,73 +122,80 @@ module Interpreter where
     env <- asks (M.insert ident loc)
     insertValue loc val
     return env
-
+-}
   evalExpr :: Expr -> InterpreterM Value
-  evalExpr (EStr pos s) = return (VString s)
-  evalExpr (EInt pos i) = return (VInt i)
-  evalExpr (ETrue pos) = return (VBool True)
-  evalExpr (EFalse pos) = return (VBool False)
   evalExpr (EVar pos ident) = getVar ident
-  evalExpr (ENot pos expr) = do
+  evalExpr (EStrLit pos s) = return (VString s)
+  evalExpr (EIntLit pos i) = return (VInt i)
+  evalExpr (ETrueLit pos) = return (VBool True)
+  evalExpr (EFalseLit pos) = return (VBool False)
+  evalExpr (ENeg pos unOp expr) = do
     val <- evalExpr expr
-    return (VBool (not $ boolyVal val))
-  evalExpr (ELog pos e1 opLog e2) = do -- and, or
-    v1 <- evalExpr e1
-    v2 <- evalExpr e2
-    let b1 = boolyVal v1; b2 = boolyVal v2 in
-      case opLog of
-        (And pos) -> return (VBool $ b1 && b2)
-        (Or pos)  -> return (VBool $ b1 || b2)
-  evalExpr (ECmp pos e1 opCmp e2) = do
-    v1 <- evalExpr e1
-    v2 <- evalExpr e2
-    let im1 = intyVal v1; im2 = intyVal v2; op = getHsCmpOp opCmp in
-      case (v1, v2) of
-        (VString s1, VString s2) -> return (VBool $ op s1 s2)
-        _ -> case (im1, im2) of
-          (Just i1, Just i2) -> return (VBool $ op i1 i2)
-          _ -> throwError (showUnsupportedCmpOperandError opCmp v1 v2)
-  evalExpr (EAriS pos e1 opAriS e2) = do
-    v1 <- evalExpr e1
-    v2 <- evalExpr e2
-    let im1 = intyVal v1; im2 = intyVal v2; op = getHsAriSOp opAriS in
-      case (v1, v2, opAriS) of
-        (VString s1, VString s2, Pls _) -> return (VString $ s1 ++ s2) -- concat strings
-        _ -> case (im1, im2) of
-          (Just i1, Just i2) -> return (VInt $ op i1 i2)
-          _ -> throwError (showUnsupportedAriSOperandError opAriS v1 v2)
-  evalExpr (EAriUns pos e1 opAriUns e2) = do
-    v1 <- evalExpr e1
-    v2 <- evalExpr e2
-    let im1 = intyVal v1; im2 = intyVal v2; op = getHsAriUnsOp opAriUns in
-      case (im1, im2) of
-        (Just i, Just 0) -> throwError showZeroDivError
-        (Just i1, Just i2) -> return (VInt $ op i1 i2)
-        _ -> throwError (showUnsupportedAriUnsOperandError opAriUns v1 v2)
+    case unOp of
+      -- -
+      (OpAriNeg _) -> case intyVal val of
+                        (Just i) -> return (VInt (negate i))
+                        Nothing  -> throwError $ showUnOpTypeError unOp (showValueType val)
+      -- NOT
+      (OpLogNeg _) -> return (VBool (not $ boolyVal val))
+  evalExpr (ECompos pos e1 binOp e2) = do
+    case binOp of
+      -- / %
+      (OpAriUns pos op) -> do
+        v1 <- evalExpr e1
+        v2 <- evalExpr e2
+        let im1 = intyVal v1; im2 = intyVal v2; hsOp = getHsAriUnsOp op in
+          case (im1, im2) of
+            (Just i, Just 0) -> throwError showZeroDivError
+            (Just i1, Just i2) -> return (VInt $ hsOp i1 i2)
+            _ -> throwError (showUnsupportedAriUnsOperandError op v1 v2)
+      -- + - *
+      (OpAriS pos op) -> do
+        v1 <- evalExpr e1
+        v2 <- evalExpr e2
+        let im1 = intyVal v1; im2 = intyVal v2; hsOp = getHsAriSOp op in
+          case (v1, v2, op) of
+            (VString s1, VString s2, Add _) -> return (VString $ s1 ++ s2) -- concat strings
+            _ -> case (im1, im2) of
+                  (Just i1, Just i2) -> return (VInt $ hsOp i1 i2)
+                  _ -> throwError (showUnsupportedAriSOperandError op v1 v2)
+      -- AND OR
+      (OpLog pos op) -> do
+        v1 <- evalExpr e1
+        v2 <- evalExpr e2
+        let b1 = boolyVal v1; b2 = boolyVal v2 in
+          case op of
+            (And pos) -> return (VBool $ b1 && b2)
+            (Or pos)  -> return (VBool $ b1 || b2)
+      -- < <= > >= == !=
+      (OpCmp pos op) -> do
+        v1 <- evalExpr e1
+        v2 <- evalExpr e2
+        let im1 = intyVal v1; im2 = intyVal v2; opHs = getHsCmpOp op in
+          case (v1, v2) of
+            (VString s1, VString s2) -> return (VBool $ opHs s1 s2)
+            _ -> case (im1, im2) of
+                  (Just i1, Just i2) -> return (VBool $ opHs i1 i2)
+                  _ -> throwError (showUnsupportedCmpOperandError op v1 v2)
+
+
   {-
   TODO
   | ECall a Ident [Expr' a]
   | ETern a (Expr' a) (Expr' a) (Expr' a)
   -}
-  evalExpr _ = return VNull
-
-
-
+  evalExpr _ = undefined
 
 
   getVar :: Ident -> InterpreterM Value
   getVar ident = do
-    loc <- getVarLoc ident
-    getVarValue loc
+    mloc <- getVarLoc ident
+    case mloc of
+      Nothing    -> throwError $ showNameError ident
+      (Just loc) -> getVarValue loc
 
-  getVarLoc :: Ident -> InterpreterM Loc
-  getVarLoc ident = do
-    locMaybe <- asks (M.lookup ident)
-    case locMaybe of
-    --env <- ask                -- EQUIVALENT
-    --case (M.lookup ident env)
-      Nothing   -> throwError ("NameError: name " ++ show ident ++ " is not defined")
-      Just loc -> return loc
+  getVarLoc :: Ident -> InterpreterM (Maybe Loc)
+  getVarLoc ident = asks (M.lookup ident)
 
   getVarValue :: Loc -> InterpreterM Value
   getVarValue loc = do
@@ -227,3 +218,8 @@ module Interpreter where
   retenv = do
     env <- ask
     return (ReturnEnv env)
+
+  printEnvStore = do
+    env <- ask
+    store <- get
+    liftIO $ putStrLn $ show store
