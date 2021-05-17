@@ -8,12 +8,13 @@ import Prelude
   , Show, show
   , IO, (>>), (>>=), mapM_, putStrLn
   , FilePath
-  , getContents, readFile
+  , getContents, readFile,
   )
 import System.Environment ( getArgs )
 import System.Exit        ( exitFailure, exitSuccess )
 import Control.Monad      ( when )
 import System.IO ( stdin, stderr, hGetContents, hPutStrLn )
+import System.FilePath.Posix ( takeBaseName )
 
 import qualified Control.Exception as E
 
@@ -42,12 +43,14 @@ main = do
               exitFailure
         Right tree -> do
               --showTree 2 tree
-              (val, store) <- runInterpreterM emptyEnv emptyStore (runProgram tree)
+              (val, store) <- runInterpreterM emptyEnv emptyStore (runProgram tree (takeBaseName filename))
               case val of
                 Left e  -> hPutStrLn stderr e
                 Right code -> hPutStrLn stderr $ "Exit code: " ++ show code
               exitSuccess
-              
+
+
+
     --[]         -> getContents >>= run 2 pProgram
     --"-s":fs    -> mapM_ (runFile 0 pProgram) fs
     --fs         -> mapM_ (runFile 2 pProgram) fs

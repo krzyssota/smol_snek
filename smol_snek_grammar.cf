@@ -4,68 +4,79 @@ Program.    Program ::= [Stmt] ;
 terminator Stmt ";" ;
 
 -- DECLARATIONs
-FunDef.   Stmt ::= "def" Ident "(" [Arg] ")" Block ;
-separator Arg  "," ;
+FunDef.     Stmt ::= "def" Ident "(" [Arg] ")" Block ;
+separator   Arg  "," ;
+--terminator  Stmt ";" ;
+
 --VarDef.   Stmt ::= [Ident] "=" Expr ;
 --separator nonempty Ident "=" ;
-VarDef.   Stmt ::= [Ident] Expr ;
-terminator nonempty Ident "=" ;
+--VarDef.   Stmt ::= [Ident] Expr ;
+--terminator nonempty Ident "=" ;
+VarDef.     Stmt ::= Ident "=" Expr ;
 
 -- ARGUMENTs
 Arg.        Arg  ::= Ident;
 
 -- BLOCs
-Block.      Block     ::= "{" [Stmt] "}" ;
-LBlock.     LoopBlock ::= "{" [LoopStmt] "}" ;
-terminator  LoopStmt      ";" ;
-SBlock.     Stmt      ::= Block ;
+--Block.      Block     ::= "{" [Stmt] "}" ;
+--LBlock.     LoopBlock ::= "{" [LoopStmt] "}" ;
+--terminator  LoopStmt  ";" ;
+--SBlock.     Stmt      ::= Block ;
 
 
 -- LOOP STMTs
-LStmt.      LoopStmt ::= Stmt ;
-SBreak.     LoopStmt ::= "break" ;
-SCont.      LoopStmt ::= "continue" ;
-
+--LStmt.      LoopStmt ::= Stmt ;
+SBreak.     Stmt ::= "break" ;
+SCont.      Stmt ::= "continue" ;
+Block.      Block ::= "{" [Stmt] "}" ;
 -- IFs
-SIf.        Stmt     ::= "if"   Expr Stmt ;
-SIfElse.    Stmt     ::= "if"   Expr Stmt ElseStmt ;
-SIfElif.    Stmt     ::= "if"   Expr Stmt ElifStmt ;
-SElifElse.  ElifStmt ::= "elif" Expr Stmt ElseStmt ;
-SElifElif.  ElifStmt ::= "elif" Expr Stmt ElifStmt ;
-SElse.      ElseStmt ::= "else" Stmt ;
+SIf.        Stmt     ::= "if"   Expr Block ;
+SIfElse.    Stmt     ::= "if"   Expr Block ElseStmt ;
+SIfElif.    Stmt     ::= "if"   Expr Block ElifStmt ;
+SElifElse.  ElifStmt ::= "elif" Expr Block ElseStmt ;
+SElifElif.  ElifStmt ::= "elif" Expr Block ElifStmt ;
+SElse.      ElseStmt ::= "else" Block ;
 
 -- OTHER STMTs
-SWhile.     Stmt  ::= "while" Expr LoopBlock ;
-SRange.     Stmt  ::= "for" Ident "in range(" Expr ")" LoopBlock;
-SReturnE.   Stmt  ::= "return" Expr ;
-Print.      Stmt  ::= "print" "(" [Expr] ")" ;
-SAss.       Stmt  ::= Ident OpAss Expr ;
+SWhile.     Stmt  ::= "while" Expr Block ;
+--terminator  Stmt ";" ;
+SRange.     Stmt  ::= "for" Ident "in range(" Expr ")" Block ;
+SReturn.   Stmt  ::= "return" Expr ;
+SPrint.      Stmt  ::= "print" "(" [Expr] ")" ;
+SIOp.       Stmt  ::= Ident IOp Expr ;
 Expr.       Stmt  ::= Expr  ;
 
 -- EXPRs
-EVar.        Expr6 ::= Ident ;
-EStr.        Expr6 ::= String ;
-EInt.        Expr6 ::= Integer ;
-ETrue.       Expr6 ::= "True" ;
-EFalse.      Expr6 ::= "False" ;
-ECall.       Expr6 ::= Ident "(" [Expr] ")" ;
-ENot.        Expr5 ::= "not" Expr6 ;             -- not
-ETern.       Expr4 ::= Expr4 "if" Expr5 "else" Expr5 ;
+EVar.        Expr3 ::= Ident ;
+EStrLit.     Expr3 ::= String ;
+EIntLit.     Expr3 ::= Integer ;
+ETrueLit.    Expr3 ::= "True" ;
+EFalseLit.   Expr3 ::= "False" ;
+ECall.       Expr3 ::= Ident "(" [Expr] ")" ;
+ENeg.        Expr2 ::= UnOp Expr3 ;
+ETern.       Expr1 ::= Expr1 "if" Expr2 "else" Expr2 ;
 --EOpAss.      Expr4 ::= Ident OpAss    Expr5 ;    -- +=, -=, =
-EAriUns.     Expr3 ::= Expr3 OpAriUns Expr4 ;    -- unsafe (division by 0)
-EAriS.       Expr2 ::= Expr2 OpAriS   Expr3 ;    -- safe
-ECmp.        Expr1 ::= Expr1 OpCmp    Expr2 ;    -- >=, <=, ==, !=
-ELog.        Expr  ::= Expr  OpLog    Expr1 ;    -- and, or
+ECompos.     Expr  ::= Expr BinOp Expr1 ;
+--EAriUns.     Expr3 ::= Expr3 OpAriUns Expr4 ;    -- unsafe (division by 0)
+--EAriS.       Expr2 ::= Expr2 OpAriS   Expr3 ;    -- safe
+--ECmp.        Expr1 ::= Expr1 OpCmp    Expr2 ;    -- >=, <=, ==, !=
+--ELog.        Expr  ::= Expr  OpLog    Expr1 ;    -- and, or
 
-coercions Expr 7 ;
+coercions Expr 3 ;
 separator Expr "," ;
 
 -- TYPEs AND OPERATORs
+OpAriNeg.  UnOp     ::= "-" ;
+OpLogNeg.  UnOp     ::= "not" ;
+OpAriUns.  BinOp       ::= OpAriUns ;
+OpAriS.    BinOp       ::= OpAriS ;
+OpCmp.     BinOp       ::= OpCmp ;
+OpLog.     BinOp       ::= OpLog ;
 Mod.       OpAriUns ::= "%" ;
 Div.       OpAriUns ::= "/" ;
 Mul.       OpAriS   ::= "*" ;
-Pls.       OpAriS   ::= "+" ;
-Mns.       OpAriS   ::= "-" ;
+Add.       OpAriS   ::= "+" ;
+Sub.       OpAriS   ::= "-" ;
 Lt.        OpCmp    ::= "<" ;
 Gt.        OpCmp    ::= ">" ;
 Lte.       OpCmp    ::= "<=" ;
@@ -75,8 +86,11 @@ Ne.        OpCmp    ::= "!=" ;
 And.       OpLog    ::= "and" ;
 Or.        OpLog    ::= "or" ;
 --Ass.       OpAss    ::= "=" ;
-AddAss.    OpAss    ::= "+=" ;
-SubAss.    OpAss    ::= "-=" ;
+IAdd.    IOp    ::= "+=" ;
+ISub.    IOp    ::= "-=" ;
+IMul.    IOp    ::= "*=" ;
+IDiv.    IOp    ::= "/=" ;
+IMod.    IOp    ::= "%=" ;
 
 -- COMMENTs
 comment    "#" ;
