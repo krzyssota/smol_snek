@@ -52,9 +52,13 @@ module Interpreter where
     loc <- case mloc of
             Nothing  -> gets (getNextLoc)
             Just loc -> return loc
-    env <- asks (M.insert ident loc)
-    insertValue loc val
-    return (ReturnEnv env)
+    if loc > 0
+      then do
+        env <- asks (M.insert ident loc)
+        insertValue loc val
+        return (ReturnEnv env)
+      else
+        throwError $ showSyntaxErrorReadOnly ident
   execStmt (FunDef pos ident args block) = do
     loc <- gets (getNextLoc)
     env <- asks (M.insert ident loc)
@@ -78,6 +82,7 @@ module Interpreter where
       then execBlock ifBlock
       else execElif elif
   execStmt (SWhile pos expr block) = do
+    printEnvStore -- TODO usunac
     val <- evalExpr expr
     if boolyVal val
       then do
@@ -88,12 +93,45 @@ module Interpreter where
           Break         -> retenv
           ReturnVal val -> return (ReturnVal val)
       else retenv
+  execStmt (SRange pos ident rangeExpr block) = do
+    val <- evalExpr rangeExpr
+    case intyVal val of
+      Nothing -> throwError $ showIntyTypeError (showValueType val)
+      Just toVal -> do
+        env <- declareReadOnlyVar ident 0
+        local (const env) (range' pos ident toVal block)
+
   execStmt (SBreak pos) = return Break
   execStmt (SCont pos) = return Cont
-  -- TODO usunac zeby wiedziec ze wszyskto jest pokryte
-  --execStmt _ = do
-  --  env <- ask
-  --  return (ReturnEnv env)
+
+  range' ::  BNFC'Position -> Ident -> Integer -> Block -> InterpreterM StmtResult
+  range' pos ident toVal block = do
+    val <- getVar ident
+    case val of
+      VInt i -> do
+        if i < toVal
+          then do
+            res <- execBlock block
+
+            mloc <- getVarLoc ident
+            case mloc of
+              Just loc -> do
+                insertValue loc (VInt (i+1))
+                case res of
+                  ReturnEnv env -> range' pos ident toVal block
+                  Cont          -> range' pos ident toVal block
+                  Break         -> retenv
+                  ReturnVal val -> return (ReturnVal val)
+              Nothing -> throwError $ "coś takiego nie powinno sie zdarzyc nie można znaleźć zmiennej read only"
+          else retenv
+      _ -> throwError $ "no coś takiego nie powinno sie zdarzyc read only variable ma typ inny niz int"
+
+  declareReadOnlyVar :: Ident -> Integer -> InterpreterM Env
+  declareReadOnlyVar ident int = do
+    loc <- gets (negate . getNextLoc)
+    env <- asks (M.insert ident loc)
+    insertValue loc (VInt int)
+    return env
 
   execElif :: ElifStmt -> InterpreterM StmtResult
   execElif (SElifElse pos expr ifBlock else') =
@@ -222,4 +260,4 @@ module Interpreter where
   printEnvStore = do
     env <- ask
     store <- get
-    liftIO $ putStrLn $ show store
+    liftIO $ putStrLn $ show env ++ show store
