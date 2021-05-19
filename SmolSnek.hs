@@ -34,6 +34,7 @@ main :: IO ()
 main = do
   args <- getArgs
   case args of
+
     []         -> usage -- TODO interactive mode coś a\la to: getContents >>= run 2 pProgram
     (filename:_)     -> do
       programStr <- readFile filename
@@ -48,6 +49,8 @@ main = do
                 Left e  -> hPutStrLn stderr e
                 Right code -> hPutStrLn stderr $ "Exit code: " ++ show code
               exitSuccess
+
+
 
 
 
